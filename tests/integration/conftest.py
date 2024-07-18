@@ -26,6 +26,7 @@ from pytest_operator.plugin import OpsTest
 logger = logging.getLogger(__name__)
 SLURMD_DIR = Path(os.getenv("SLURMD_DIR", "../slurmd-operator"))
 SLURMDBD_DIR = Path(os.getenv("SLURMDBD_DIR", "../slurmdbd-operator"))
+SLURMRESTD_DIR = Path(os.getenv("SLURMRESTD_DIR", "../slurmrestd-operator"))
 
 
 def pytest_addoption(parser) -> None:
@@ -93,3 +94,23 @@ async def slurmdbd_charm(request, ops_test: OpsTest) -> Union[str, Path]:
             )
 
     return "slurmdbd"
+
+
+@pytest.fixture(scope="module")
+async def slurmrestd_charm(request, ops_test: OpsTest) -> Union[str, Path]:
+    """Pack slurmrestd charm to use for integration tests when --use-local is specified.
+
+    Returns:
+        `str` "slurmrestd" if --use-local not specified or if SLURMRESTD_DIR does not exist.
+    """
+    if request.config.option.use_local:
+        logger.info("Using local slurmrestd operator rather than pulling from Charmhub")
+        if SLURMRESTD_DIR.exists():
+            return await ops_test.build_charm(SLURMRESTD_DIR)
+        else:
+            logger.warning(
+                f"{SLURMRESTD_DIR} not found. "
+                f"Defaulting to latest/edge slurmrestd operator from Charmhub"
+            )
+
+    return "slurmrestd"

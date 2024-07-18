@@ -27,22 +27,29 @@ logger = logging.getLogger(__name__)
 SLURMCTLD = "slurmctld"
 SLURMD = "slurmd"
 SLURMDBD = "slurmdbd"
+SLURMRESTD = "slurmrestd"
 DATABASE = "mysql"
 ROUTER = "mysql-router"
-UNIT_NAME = f"{SLURMCTLD}/0"
 
 
 @pytest.mark.abort_on_fail
 @pytest.mark.skip_if_deployed
 @pytest.mark.order(1)
 async def test_build_and_deploy_against_edge(
-    ops_test: OpsTest, charm_base: str, slurmctld_charm, slurmd_charm, slurmdbd_charm
+    ops_test: OpsTest,
+    charm_base: str,
+    slurmctld_charm,
+    slurmd_charm,
+    slurmdbd_charm,
+    slurmrestd_charm,
 ) -> None:
-    """Test that the slurmctld charm can stabilize against slurmd, slurmdbd, and MySQL."""
-    logger.info(f"Deploying {SLURMCTLD} against {SLURMD}, {SLURMDBD}, and {DATABASE}")
+    """Test that the slurmctld charm can stabilize against slurmd, slurmdbd, slurmrestd, and MySQL."""
+    logger.info(
+        f"Deploying {SLURMCTLD} against {SLURMD}, {SLURMDBD}, {SLURMRESTD}, and {DATABASE}"
+    )
     # Pack charms and download NHC resource for the slurmd operator.
-    slurmctld, slurmd, slurmdbd = await asyncio.gather(
-        slurmctld_charm, slurmd_charm, slurmdbd_charm
+    slurmctld, slurmd, slurmdbd, slurmrestd = await asyncio.gather(
+        slurmctld_charm, slurmd_charm, slurmdbd_charm, slurmrestd_charm
     )
     # Deploy the test Charmed SLURM cloud.
     await asyncio.gather(
@@ -67,6 +74,13 @@ async def test_build_and_deploy_against_edge(
             base=charm_base,
         ),
         ops_test.model.deploy(
+            str(slurmrestd),
+            application_name=SLURMRESTD,
+            channel="edge" if isinstance(slurmrestd, str) else None,
+            num_units=1,
+            base=charm_base,
+        ),
+        ops_test.model.deploy(
             ROUTER,
             application_name=f"{SLURMDBD}-{ROUTER}",
             channel="dpe/edge",
@@ -84,12 +98,13 @@ async def test_build_and_deploy_against_edge(
     # Set integrations for charmed applications.
     await ops_test.model.integrate(f"{SLURMCTLD}:{SLURMD}", f"{SLURMD}:{SLURMCTLD}")
     await ops_test.model.integrate(f"{SLURMCTLD}:{SLURMDBD}", f"{SLURMDBD}:{SLURMCTLD}")
+    await ops_test.model.integrate(f"{SLURMCTLD}:{SLURMRESTD}", f"{SLURMRESTD}:{SLURMCTLD}")
     await ops_test.model.integrate(f"{SLURMDBD}-{ROUTER}:backend-database", f"{DATABASE}:database")
     await ops_test.model.integrate(f"{SLURMDBD}:database", f"{SLURMDBD}-{ROUTER}:database")
     # Reduce the update status frequency to accelerate the triggering of deferred events.
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(apps=[SLURMCTLD], status="active", timeout=1000)
-        assert ops_test.model.units.get(UNIT_NAME).workload_status == "active"
+        assert ops_test.model.applications["slurmctld"].units[0].workload_status == "active"
 
 
 @pytest.mark.abort_on_fail
@@ -102,7 +117,7 @@ async def test_build_and_deploy_against_edge(
 async def test_slurmctld_is_active(ops_test: OpsTest) -> None:
     """Test that slurmctld is active inside Juju unit."""
     logger.info("Checking that slurmctld is active inside Juju unit")
-    slurmctld_unit = ops_test.model.units.get(UNIT_NAME)
+    slurmctld_unit = ops_test.model.applications["slurmctld"].units[0]
     res = (await slurmctld_unit.ssh("systemctl is-active slurmctld")).strip("\n")
     assert res == "active"
 
@@ -117,7 +132,7 @@ async def test_slurmctld_is_active(ops_test: OpsTest) -> None:
 async def test_slurmctld_port_listen(ops_test: OpsTest) -> None:
     """Test that slurmctld is listening on port 6817."""
     logger.info("Checking that slurmctld is listening on port 6817")
-    slurmctld_unit = ops_test.model.units.get(UNIT_NAME)
+    slurmctld_unit = ops_test.model.applications["slurmctld"].units[0]
     res = await slurmctld_unit.ssh("sudo lsof -t -n -iTCP:6817 -sTCP:LISTEN")
     assert res != ""
 
@@ -132,6 +147,6 @@ async def test_slurmctld_port_listen(ops_test: OpsTest) -> None:
 async def test_munge_is_active(ops_test: OpsTest) -> None:
     """Test that munge is active inside Juju unit."""
     logger.info("Checking that munge is active inside Juju unit")
-    slurmctld_unit = ops_test.model.units.get(UNIT_NAME)
+    slurmctld_unit = ops_test.model.applications["slurmctld"].units[0]
     res = (await slurmctld_unit.ssh("systemctl is-active munge")).strip("\n")
     assert res == "active"
