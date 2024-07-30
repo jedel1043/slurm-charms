@@ -1,0 +1,36 @@
+# Copyright 2020-2024 Omnivector, LLC.
+# See LICENSE file for licensing details.
+
+name: slurmrestd
+summary: |
+  Interface to Slurm via REST API.
+description: |
+  This charm provides slurmrestd, munged, and the bindings to other utilities
+  that make lifecycle operations a breeze.
+
+  slurmrestd is a REST API interface for SLURM.
+
+links:
+  contact: https://matrix.to/#/#hpc:ubuntu.com
+  source:
+    - https://github.com/omnivector-solutions/slurmrestd-operator
+  issues:
+    - https://github.com/omnivector-solutions/slurmrestd-operator/issues
+
+provides:
+  slurmctld:
+    interface: slurmrestd
+    limit: 1
+
+assumes:
+  - juju
+
+type: charm
+bases:
+  - build-on:
+      - name: ubuntu
+        channel: "22.04"
+    run-on:
+      - name: ubuntu
+        channel: "22.04"
+        architectures: [amd64]

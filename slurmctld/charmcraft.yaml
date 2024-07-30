@@ -1,0 +1,144 @@
+# Copyright 2020 Omnivector Solutions, LLC
+# See LICENSE file for licensing details.
+name: slurmctld
+summary: |
+  Slurmctld, the central management daemon of Slurm.
+description: |
+  This charm provides slurmctld, munged, and the bindings to other utilities
+  that make lifecycle operations a breeze.
+
+  slurmctld is the central management daemon of SLURM. It monitors all other
+  SLURM daemons and resources, accepts work (jobs), and allocates resources
+  to those jobs.  Given the critical functionality of slurmctld, there may be
+  a backup server to assume these functions in the event that the primary
+  server fails.
+
+links:
+  contact: https://matrix.to/#/#hpc:ubuntu.com
+
+  issues: 
+  - https://github.com/charmed-hpc/slurmctld-operator/issues
+
+  source:
+  - https://github.com/charmed-hpc/slurmctld-operator
+
+requires:
+  slurmd:
+    interface: slurmd
+  slurmdbd:
+    interface: slurmdbd
+  slurmrestd:
+    interface: slurmrestd
+
+assumes:
+  - juju
+
+type: charm
+bases:
+  - build-on:
+      - name: ubuntu
+        channel: "22.04"
+    run-on:
+      - name: ubuntu
+        channel: "22.04"
+        architectures: [amd64]
+
+
+config:
+  options:
+    cluster-name:
+      type: string
+      default: osd-cluster
+      description: |
+        Name to be recorded in database for jobs from this cluster.
+  
+        This is important if a single database is used to record information from
+        multiple Slurm-managed clusters.
+
+    default-partition:
+      type: string
+      default: ""
+      description: |
+        Default Slurm partition. This is only used if defined, and must match an
+        existing partition.
+
+    slurm-conf-parameters:
+      type: string
+      default: ""
+      description: |
+        User supplied Slurm configuration as a multiline string.
+  
+        Example usage:
+        $ juju config slurmcltd slurm-conf-parameters="$(cat additional.conf)"
+
+    cgroup-parameters:
+      type: string
+      default: |
+        CgroupAutomount=yes
+        ConstrainCores=yes
+      description: |
+        User supplied configuration for `cgroup.conf`.
+  
+    health-check-params:
+      default: ""
+      type: string
+      description: |
+        Extra parameters for NHC command.
+  
+        This option can be used to customize how NHC is called, e.g. to send an
+        e-mail to an admin when NHC detects an error set this value to.
+        `-M admin@domain.com`.
+
+    health-check-interval:
+      default: 600
+      type: int
+      description: Interval in seconds between executions of the Health Check.
+
+    health-check-state:
+      default: "ANY,CYCLE"
+      type: string
+      description: Only run the Health Check on nodes in this state.
+
+actions:
+  show-current-config:
+    description: |
+      Display the currently used `slurm.conf`.
+  
+      Example usage:
+
+      ```bash
+      juju run slurmctld/leader show-current-config \
+          --quiet --format=json  | jq .[].results.slurm.conf | xargs -I % -0 python3 -c 'print(%)'
+      ```
+
+  drain:
+    description: |
+      Drain specified nodes.
+  
+      Example usage:
+      $ juju run slurmctld/leader drain nodename="node-[1,2]" reason="Updating kernel"
+    params:
+      nodename:
+        type: string
+        description: The nodes to drain, using the Slurm format, e.g. `"node-[1,2]"`.
+      reason:
+        type: string
+        description: Reason to drain the nodes.
+    required:
+      - nodename
+      - reason
+  resume:
+    description: |
+      Resume specified nodes.
+  
+      Note: Newly added nodes will remain in the `down` state until configured,
+      with the `node-configured` action.
+  
+      Example usage: $ juju run slurmctld/leader resume nodename="node-[1,2]"
+    params:
+      nodename:
+        type: string
+        description: |
+          The nodes to resume, using the Slurm format, e.g. `"node-[1,2]"`.
+    required:
+      - nodename
