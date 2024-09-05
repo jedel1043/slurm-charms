@@ -130,7 +130,7 @@ class SlurmctldManager:
         self._slurmctld_package = CharmedHPCPackageLifecycleManager("slurmctld")
 
     def install(self) -> bool:
-        """Install slurmctld and munge to the system."""
+        """Install slurmctld, munge, and common packages to the system."""
         if self._slurmctld_package.install() is not True:
             return False
         systemd.service_stop("slurmctld")

@@ -111,6 +111,25 @@ class CharmedHPCPackageLifecycleManager:
         return slurm_package_vers
 
 
+class CommonPackagesLifecycleManager:
+    """Facilitate common package lifecycles."""
+
+    def install(self) -> bool:
+        """Install package using lib apt."""
+        package_installed = False
+
+        try:
+            apt.update()
+            apt.add_package(["libpmix-dev", "openmpi-bin"])
+            package_installed = True
+        except apt.PackageNotFoundError:
+            logger.error("Package not found in package cache or on system.")
+        except apt.PackageError as e:
+            logger.error(f"Could not install package. Reason: {e.message}")
+
+        return package_installed
+
+
 class SlurmdManager:
     """SlurmdManager."""
 
@@ -118,9 +137,14 @@ class SlurmdManager:
         self._munge_package = CharmedHPCPackageLifecycleManager("munge")
         self._slurmd_package = CharmedHPCPackageLifecycleManager("slurmd")
         self._slurm_client_package = CharmedHPCPackageLifecycleManager("slurm-client")
+        self._common_packages = CommonPackagesLifecycleManager()
 
     def install(self) -> bool:
-        """Install slurmd, slurm-client and munge packages to the system."""
+        """Install slurmd, slurm-client, munge, and common packages to the system."""
+        if self._common_packages.install() is not True:
+            logger.debug("Cannot install common packages.")
+            return False
+
         if self._slurmd_package.install() is not True:
             logger.debug("Cannot install 'slurmd' package.")
             return False
