@@ -36,6 +36,10 @@ provides:
     interface: cos_agent
     limit: 1
 
+peers:
+  slurmctld-peer:
+    interface: slurmctld-peer
+
 assumes:
   - juju
 
