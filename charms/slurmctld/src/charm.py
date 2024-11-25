@@ -9,7 +9,11 @@ import shlex
 import subprocess
 from typing import Any, Dict, List, Optional, Union
 
-from constants import CHARM_MAINTAINED_SLURM_CONF_PARAMETERS, PEER_RELATION
+from constants import (
+    CHARM_MAINTAINED_CGROUP_CONF_PARAMETERS,
+    CHARM_MAINTAINED_SLURM_CONF_PARAMETERS,
+    PEER_RELATION,
+)
 from exceptions import IngressAddressUnavailableError
 from interface_slurmd import (
     PartitionAvailableEvent,
@@ -235,11 +239,12 @@ class SlurmctldCharm(CharmBase):
             self._slurmctld.service.disable()
             self._slurmctld.config.dump(slurm_config)
 
-            # Write out any user_supplied_cgroup_parameters to /etc/slurm/cgroup.conf.
-            if user_supplied_cgroup_parameters := self.config.get("cgroup-parameters", ""):
-                self._slurmctld.cgroup.dump(
-                    CgroupConfig.from_str(str(user_supplied_cgroup_parameters))
-                )
+            # Write out any cgroup parameters to /etc/slurm/cgroup.conf.
+            if not is_container():
+                cgroup_config = CHARM_MAINTAINED_CGROUP_CONF_PARAMETERS
+                if user_supplied_cgroup_params := self._get_user_supplied_cgroup_parameters():
+                    cgroup_config.update(user_supplied_cgroup_params)
+                self._slurmctld.cgroup.dump(CgroupConfig(**cgroup_config))
 
             self._slurmctld.service.enable()
             self._slurmctld.scontrol("reconfigure")
@@ -328,6 +333,17 @@ class SlurmctldCharm(CharmBase):
                 if not line.startswith("#") and line.strip() != ""
             }
         return user_supplied_parameters
+
+    def _get_user_supplied_cgroup_parameters(self) -> Dict[Any, Any]:
+        """Gather, parse, and return the user supplied cgroup parameters."""
+        user_supplied_cgroup_parameters = {}
+        if custom_cgroup_config := self.config.get("cgroup-parameters"):
+            user_supplied_cgroup_parameters = {
+                line.split("=")[0]: line.split("=", 1)[1]
+                for line in str(custom_cgroup_config).split("\n")
+                if not line.startswith("#") and line.strip() != ""
+            }
+        return user_supplied_cgroup_parameters
 
     def _get_new_node_names_from_slurm_config(
         self, slurm_config: SlurmConfig

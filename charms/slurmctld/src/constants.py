@@ -5,6 +5,13 @@
 
 PEER_RELATION = "slurmctld-peer"
 
+CHARM_MAINTAINED_CGROUP_CONF_PARAMETERS = {
+    "ConstrainCores": "yes",
+    "ConstrainDevices": "yes",
+    "ConstrainRAMSpace": "yes",
+    "ConstrainSwapSpace": "yes",
+}
+
 CHARM_MAINTAINED_SLURM_CONF_PARAMETERS = {
     "AuthAltParameters": {"jwt_key": "/var/lib/slurm/checkpoint/jwt_hs256.key"},
     "AuthAltTypes": ["auth/jwt"],

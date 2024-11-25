@@ -96,11 +96,7 @@ config:
 
     cgroup-parameters:
       type: string
-      default: |
-        ConstrainCores=yes
-        ConstrainDevices=yes
-        ConstrainRAMSpace=yes
-        ConstrainSwapSpace=yes
+      default: ""
       description: |
         User supplied configuration for `cgroup.conf`.
 
