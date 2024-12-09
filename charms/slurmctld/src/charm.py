@@ -389,9 +389,7 @@ class SlurmctldCharm(CharmBase):
 
     def _resume_nodes(self, nodelist: List[str]) -> None:
         """Run scontrol to resume the specified node list."""
-        nodes = ",".join(nodelist)
-        update_cmd = f"update nodename={nodes} state=resume"
-        self._slurmctld.scontrol(*shlex.split(update_cmd))
+        self._slurmctld.scontrol("update", f"nodename={','.join(nodelist)}", "state=resume")
 
     @property
     def _cluster_name(self) -> str:
