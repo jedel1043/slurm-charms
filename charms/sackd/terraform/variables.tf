@@ -20,7 +20,7 @@ variable "app_name" {
 variable "channel" {
   description = "Channel to deploy the sackd charm from."
   type        = string
-  default     = "latest/stable"
+  default     = "latest/edge"
 }
 
 variable "config" {
