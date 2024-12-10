@@ -21,5 +21,6 @@ output "requires" {
     slurmd     = "slurmd"
     slurmdbd   = "slurmdbd"
     slurmrestd = "slurmrestd"
+    login-node = "login-node"
   }
 }
