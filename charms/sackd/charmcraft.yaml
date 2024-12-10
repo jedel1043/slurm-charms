@@ -32,17 +32,8 @@ platforms:
 
 parts:
   charm:
-    charm-requirements: [ "requirements.txt" ]
-    override-build: |
-      cp /usr/bin/rustc-1.80 /usr/bin/rustc
-      craftctl default
-    build-packages:
-      - libffi-dev
-      - libssl-dev
-      - rustc-1.80
-      - cargo
-      - pkg-config
-      - git
+    charm-binary-python-packages:
+      - cryptography ~= 44.0.0
 
 provides:
   slurmctld:
