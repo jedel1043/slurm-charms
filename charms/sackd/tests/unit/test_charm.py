@@ -32,7 +32,6 @@ class TestCharm(TestCase):
         """Set up unit test."""
         self.ctx = Context(SackdCharm)
 
-    @patch("charms.operator_libs_linux.v0.juju_systemd_notices.SystemdNotices.subscribe")
     @patch("ops.framework.EventBase.defer")
     def test_install_success(self, defer, *_) -> None:
         """Test install success behavior."""
@@ -61,24 +60,6 @@ class TestCharm(TestCase):
             self.assertFalse(manager.charm._stored.sackd_installed)
 
         defer.assert_called()
-
-    def test_service_sackd_start(self) -> None:
-        """Test service_sackd_started event handler."""
-        with self.ctx(self.ctx.on.start(), State()) as manager:
-            # Run method directly rather than emit a ServiceStartedEvent.
-            # TODO: Refactor once Scenario has restored support for running custom events. See:
-            # https://github.com/canonical/operator/issues/1421
-            manager.charm._on_sackd_started(None)
-            self.assertEqual(manager.charm.unit.status, ActiveStatus())
-
-    def test_service_sackd_stopped(self) -> None:
-        """Test service_sackd_stopped event handler."""
-        with self.ctx(self.ctx.on.stop(), State()) as manager:
-            # Run method directly rather than emit a ServiceStoppedEvent.
-            # TODO: Refactor once Scenario has restored support for running custom events. See:
-            # https://github.com/canonical/operator/issues/1421
-            manager.charm._on_sackd_stopped(None)
-            self.assertEqual(manager.charm.unit.status, BlockedStatus("sackd not running"))
 
     @patch("interface_slurmctld.Slurmctld.is_joined", new_callable=PropertyMock(return_value=True))
     def test_update_status_success(self, *_) -> None:
