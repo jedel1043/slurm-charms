@@ -50,17 +50,30 @@ class TestCharm(TestCase):
         )
         defer.assert_not_called()
 
-    @patch("utils.gpu.autoinstall")
     @patch("utils.nhc.install")
     @patch("utils.service.override_service")
     @patch("charms.operator_libs_linux.v0.juju_systemd_notices.SystemdNotices.subscribe")
+    @patch("utils.gpu._import")
+    @patch("charms.operator_libs_linux.v0.apt.add_package")
     @patch("ops.framework.EventBase.defer")
-    def test_install_success(self, defer, *_) -> None:
+    def test_install_success(self, defer, apt_mock, import_mock, *_) -> None:
         """Test install success behavior."""
         self.harness.charm._slurmd.install = Mock()
         self.harness.charm._slurmd.version = Mock(return_value="24.05.2-1")
+
+        # GPU detection test setup
+        detect_mock = Mock()
+        metapackage = "headless-no-dkms-535-server"
+        linux_modules = "linux-modules-535-server"
+        detect_mock.system_gpgpu_driver_packages.return_value = {
+            "driver-535-server": {"recommended": True, "metapackage": metapackage}
+        }
+        detect_mock.get_linux_modules_metapackage.return_value = linux_modules
+        import_mock.return_value = detect_mock
+
         self.harness.charm.on.install.emit()
 
+        apt_mock.assert_called_with([metapackage, linux_modules])
         self.assertTrue(self.harness.charm._stored.slurm_installed)
         defer.assert_not_called()
 
@@ -88,6 +101,45 @@ class TestCharm(TestCase):
         """Test service_slurmd_stopped event handler."""
         self.harness.charm.on.service_slurmd_stopped.emit()
         self.assertEqual(self.harness.charm.unit.status, BlockedStatus("slurmd not running"))
+
+    @patch("utils.machine.get_slurmd_info")
+    @patch("utils.gpu._import")
+    def test_slurmctld_on_relation_created(self, import_mock, machine_mock) -> None:
+        """Test slurmctld relation create behavior."""
+        # Compute node mock data
+        node = {
+            "NodeName": "node1",
+            "CPUs": "16",
+            "Boards": "1",
+            "SocketsPerBoard": "1",
+            "CoresPerSocket": "8",
+            "ThreadsPerCore": "2",
+            "RealMemory": "31848",
+        }
+        machine_mock.return_value = node
+
+        # GPU mock data
+        pynvml_mock = Mock()
+        pynvml_mock.nvmlDeviceGetCount.return_value = 4
+        pynvml_mock.nvmlDeviceGetName.side_effect = ["Tesla T4", "Tesla T4", "L40S", "L40S"]
+        pynvml_mock.nvmlDeviceGetMinorNumber.side_effect = [0, 1, 2, 3]
+        import_mock.return_value = pynvml_mock
+
+        relation_id = self.harness.add_relation("slurmctld", "slurmd")
+
+        expected = (
+            '{"node_parameters": {'
+            '"NodeName": "node1", "CPUs": "16", "Boards": "1", '
+            '"SocketsPerBoard": "1", "CoresPerSocket": "8", '
+            '"ThreadsPerCore": "2", "RealMemory": "31848", '
+            '"Gres": ["gpu:tesla_t4:2", "gpu:l40s:2"], "MemSpecLimit": "1024"}, '
+            '"new_node": true, '
+            '"gres": ['
+            '{"Name": "gpu", "Type": "tesla_t4", "File": "/dev/nvidia[0-1]"}, '
+            '{"Name": "gpu", "Type": "l40s", "File": "/dev/nvidia[2-3]"}'
+            "]}"
+        )
+        self.assertEqual(self.harness.get_relation_data(relation_id, "slurmd/0")["node"], expected)
 
     @patch("interface_slurmctld.Slurmctld.is_joined", new_callable=PropertyMock(return_value=True))
     def test_update_status_success(self, *_) -> None:

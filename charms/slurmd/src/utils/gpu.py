@@ -39,8 +39,8 @@ class GPUDriverDetector:
             raise GPUInstallError(f"failed to install {pkgs} reason: {e}")
 
         # ubuntu-drivers requires apt_pkg for package operations
-        self._detect = import_module("UbuntuDrivers.detect")
-        self._apt_pkg = import_module("apt_pkg")
+        self._detect = _import("UbuntuDrivers.detect")
+        self._apt_pkg = _import("apt_pkg")
         self._apt_pkg.init()
 
     def _system_gpgpu_driver_packages(self) -> dict:
@@ -121,7 +121,7 @@ def get_gpus() -> dict:
 
     # Return immediately if pynvml not installed...
     try:
-        pynvml = import_module("pynvml")
+        pynvml = _import("pynvml")
     except ModuleNotFoundError:
         return gpu_info
 
@@ -155,3 +155,8 @@ def get_gpus() -> dict:
 
     pynvml.nvmlShutdown()
     return gpu_info
+
+
+def _import(module):
+    """Wrap programmatic import of packages."""
+    return import_module(module)
