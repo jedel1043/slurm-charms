@@ -76,6 +76,12 @@ class SlurmdCharm(CharmBase):
 
     def _on_install(self, event: InstallEvent) -> None:
         """Perform installation operations for slurmd."""
+        # Account for case where base image has been auto-upgraded by Juju and a reboot is pending
+        # before charm code runs. Reboot "now", before the current hook completes, and restart the
+        # hook after reboot. Prevents issues such as drivers/kernel modules being installed for a
+        # running kernel pending replacement by a newer version on reboot.
+        self._reboot_if_required(now=True)
+
         self.unit.status = WaitingStatus("installing slurmd")
 
         try:
@@ -325,11 +331,11 @@ class SlurmdCharm(CharmBase):
 
         return True
 
-    def _reboot_if_required(self) -> None:
+    def _reboot_if_required(self, now: bool = False) -> None:
         """Perform a reboot of the unit if required, e.g. following a driver installation."""
         if Path("/var/run/reboot-required").exists():
             logger.info("unit rebooting")
-            self.unit.reboot()
+            self.unit.reboot(now)
 
     @staticmethod
     def _ranges_and_strides(nums) -> str:
