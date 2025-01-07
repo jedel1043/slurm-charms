@@ -30,7 +30,7 @@ class GPUDriverDetector:
     """Detects GPU driver and kernel packages appropriate for the current hardware."""
 
     def __init__(self):
-        """Initialise detection attributes and interfaces."""
+        """Initialize detection attributes and interfaces."""
         # Install ubuntu-drivers tool and Python NVML bindings
         pkgs = ["ubuntu-drivers-common", "python3-pynvml"]
         try:
@@ -90,12 +90,12 @@ def autoinstall() -> None:
     Raises:
         GPUInstallError: Raised if error is encountered during package install.
     """
-    _logger.info("detecting GPUs")
+    _logger.info("detecting GPUs and installing drivers")
     detector = GPUDriverDetector()
     install_packages = detector.system_packages()
 
     if len(install_packages) == 0:
-        _logger.info("no GPUs detected")
+        _logger.info("no GPU drivers requiring installation")
         return
 
     _logger.info(f"installing GPU driver packages: {install_packages}")
@@ -123,12 +123,15 @@ def get_gpus() -> dict:
     try:
         pynvml = _import("pynvml")
     except ModuleNotFoundError:
+        _logger.info("cannot gather GPU info: pynvml module not installed")
         return gpu_info
 
     # ...or Nvidia drivers not loaded.
     try:
         pynvml.nvmlInit()
-    except pynvml.NVMLError_DriverNotLoaded:
+    except pynvml.NVMLError as e:
+        _logger.info("no GPU info gathered: drivers cannot be detected")
+        _logger.debug(f"NVML init failed with reason: {e}")
         return gpu_info
 
     gpu_count = pynvml.nvmlDeviceGetCount()
