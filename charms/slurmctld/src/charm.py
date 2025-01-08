@@ -215,7 +215,7 @@ class SlurmctldCharm(CharmBase):
             event.fail(message=f"Error resuming {nodes}: {e.output}")
 
     def _on_slurmd_available(self, event: SlurmdAvailableEvent) -> None:
-        self._add_to_gres_conf(event)
+        self._update_gres_conf(event)
         self._on_write_slurm_conf(event)
 
     def _on_slurmd_departed(self, event: SlurmdDepartedEvent) -> None:
@@ -224,12 +224,13 @@ class SlurmctldCharm(CharmBase):
         self._write_gres_conf(event)
         self._on_write_slurm_conf(event)
 
-    def _add_to_gres_conf(self, event: SlurmdAvailableEvent) -> None:
-        """Write new nodes to gres.conf configuration file for Generic Resource scheduling."""
-        # This function does not perform an "scontrol reconfigure". It is expected
-        # _on_write_slurm_conf() is called immediately following to do this.
+    def _update_gres_conf(self, event: SlurmdAvailableEvent) -> None:
+        """Write new nodes to gres.conf configuration file for Generic Resource scheduling.
 
-        # Only the leader should write the config.
+        Warnings:
+            * This function does not perform an `scontrol reconfigure`. It is expected
+               that the function `_on_write_slurm_conf()` is called immediately following to do this.
+        """
         if not self.model.unit.is_leader():
             return
 
@@ -238,22 +239,21 @@ class SlurmctldCharm(CharmBase):
             return
 
         if gres_info := event.gres_info:
-            # Build list of GRESNodes expected by slurmutils
             gres_nodes = []
             for resource in gres_info:
                 node = GRESNode(NodeName=str(event.node_name), **resource)
                 gres_nodes.append(node)
 
-            # Update gres.conf
             with self._slurmctld.gres.edit() as config:
                 config.nodes[event.node_name] = gres_nodes
 
     def _write_gres_conf(self, event: SlurmdDepartedEvent) -> None:
-        """Write out current gres.conf configuration file for Generic Resource scheduling."""
-        # This function does not perform an "scontrol reconfigure". It is expected
-        # _on_write_slurm_conf() is called immediately following to do this.
+        """Write out current gres.conf configuration file for Generic Resource scheduling.
 
-        # Only the leader should write the config.
+        Warnings:
+            * This function does not perform an `scontrol reconfigure`. It is expected
+               that the function `_on_write_slurm_conf()` is called immediately following to do this.
+        """
         if not self.model.unit.is_leader():
             return
 
@@ -261,8 +261,7 @@ class SlurmctldCharm(CharmBase):
             event.defer()
             return
 
-        # Get current GRES state for all available nodes and write to gres.conf.
-        gres_all_nodes = self._slurmd.get_gres()
+        gres_all_nodes = self._slurmd.get_all_gres_info()
         gres_conf = GRESConfig(Nodes=gres_all_nodes)
         self._slurmctld.gres.dump(gres_conf)
 

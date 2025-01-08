@@ -266,9 +266,8 @@ class Slurmd(Object):
         )
         return {"DownNodes": new_node_down_nodes, "Nodes": nodes, "Partitions": partitions}
 
-    def get_gres(self) -> Dict[str, Any]:
+    def get_all_gres_info(self) -> Dict[str, Any]:
         """Return GRES configuration for all currently related compute nodes."""
-        # Loop over all relation units, gathering GRES info.
         gres_info = {}
         if relations := self.framework.model.relations.get(self._relation_name):
             for relation in relations:
@@ -281,7 +280,7 @@ class Slurmd(Object):
                         ):
 
                             node_name = node_config["NodeName"]
-                            # slurmutils expects NodeName in values.
+                            # Add NodeName to each GRES device to match the format required by slurmutils.
                             for device in gres:
                                 device["NodeName"] = node_name
                             gres_info[node_name] = gres
