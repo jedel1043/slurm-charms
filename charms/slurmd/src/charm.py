@@ -334,7 +334,7 @@ class SlurmdCharm(CharmBase):
     def _reboot_if_required(self, now: bool = False) -> None:
         """Perform a reboot of the unit if required, e.g. following a driver installation."""
         if Path("/var/run/reboot-required").exists():
-            logger.info("unit rebooting")
+            logger.info("rebooting unit %s", self.unit.name)
             self.unit.reboot(now)
 
     @staticmethod
@@ -373,34 +373,25 @@ class SlurmdCharm(CharmBase):
         """Get the node from stored state."""
         slurmd_info = machine.get_slurmd_info()
 
-        # Get GPU info and build GRES configuration.
         gres_info = []
-        if gpus := gpu.get_gpus():
+        if gpus := gpu.get_all_gpu():
             for model, devices in gpus.items():
                 # Build gres.conf line for this GPU model.
                 if len(devices) == 1:
                     device_suffix = next(iter(devices))
                 else:
-                    # For multi-gpu setups, "File" uses ranges and strides syntax,
-                    # e.g. File=/dev/nvidia[0-3], File=/dev/nvidia[0,2-3]
+                    # Get numeric range of devices associated with this GRES resource. See:
+                    # https://slurm.schedmd.com/gres.conf.html#OPT_File
                     device_suffix = self._ranges_and_strides(sorted(devices))
                 gres_line = {
-                    # NodeName included in node_parameters.
                     "Name": "gpu",
                     "Type": model,
                     "File": f"/dev/nvidia{device_suffix}",
                 }
-                # Append to list of GRES lines for all models
                 gres_info.append(gres_line)
-
-                # Add to node parameters to ensure included in slurm.conf.
-                slurm_conf_gres = f"gpu:{model}:{len(devices)}"
-                try:
-                    # Add to existing Gres line.
-                    slurmd_info["Gres"].append(slurm_conf_gres)
-                except KeyError:
-                    # Create a new Gres entry if none present
-                    slurmd_info["Gres"] = [slurm_conf_gres]
+                slurmd_info["Gres"] = cast(list[str], slurmd_info.get("Gres", [])) + [
+                    f"gpu:{model}:{len(devices)}"
+                ]
 
         node = {
             "node_parameters": {

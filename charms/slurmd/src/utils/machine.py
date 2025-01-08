@@ -16,13 +16,16 @@
 
 import logging
 import subprocess
-from typing import Any, Dict
 
 _logger = logging.getLogger(__name__)
 
 
-def get_slurmd_info() -> Dict[str, Any]:
-    """Get machine info as reported by `slurmd -C`."""
+def get_slurmd_info() -> dict[str, str | list[str]]:
+    """Get machine info as reported by `slurmd -C`.
+
+    For details see:
+    https://slurm.schedmd.com/slurmd.html
+    """
     try:
         r = subprocess.check_output(["slurmd", "-C"], text=True).strip()
     except subprocess.CalledProcessError as e:
@@ -31,10 +34,10 @@ def get_slurmd_info() -> Dict[str, Any]:
 
     info = {}
     for opt in r.split()[:-1]:
-        key, value = opt.split("=")
-        # Split comma-separated lists, e.g. Gres=gpu:model_a:1,gpu:model_b:1
-        if "," in value:
-            info[key] = value.split(",")
-        else:
-            info[key] = value
+        k, v = opt.split("=")
+        if k == "Gres":
+            info[k] = v.split(",")
+            continue
+
+        info[k] = v
     return info
