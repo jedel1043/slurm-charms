@@ -4,7 +4,6 @@
 
 """Slurmd Operator Charm."""
 
-import itertools
 import logging
 from pathlib import Path
 from typing import Any, Dict, cast
@@ -22,6 +21,7 @@ from ops import (
     WaitingStatus,
     main,
 )
+from slurmutils import calculate_rs
 from slurmutils.models.option import NodeOptionSet, PartitionOptionSet
 from utils import gpu, machine, nhc, service
 
@@ -337,38 +337,6 @@ class SlurmdCharm(CharmBase):
             logger.info("rebooting unit %s", self.unit.name)
             self.unit.reboot(now)
 
-    @staticmethod
-    def _ranges_and_strides(nums) -> str:
-        """Return ranges and strides for given iterable.
-
-        Requires input elements to be unique and sorted ascending.
-
-        Returns:
-            A square-bracketed string with comma-separated ranges of consecutive values.
-
-            example_input  = [0,1,2,3,4,5,6,8,9,10,12,14,15,16,18]
-            example_output = '[0-6,8-10,12,14-16,18]'
-        """
-        out = "["
-
-        # The input is enumerate()-ed to produce a list of tuples of the elements and their indices.
-        # groupby() uses the lambda key function to group these tuples by the difference between the element and index.
-        # Consecutive values have equal difference between element and index, so are grouped together.
-        # Hence, the elements of the first and last members of each group give the range of consecutive values.
-        # If the group has only a single member, there are no consecutive values either side of it (a "stride").
-        for _, group in itertools.groupby(enumerate(nums), lambda elems: elems[1] - elems[0]):
-            group = list(group)
-
-            if len(group) == 1:
-                # Single member, this is a stride.
-                out += f"{group[0][1]},"
-            else:
-                # Range of consecutive values is first-last in group.
-                out += f"{group[0][1]}-{group[-1][1]},"
-
-        out = out.rstrip(",") + "]"
-        return out
-
     def get_node(self) -> Dict[Any, Any]:
         """Get the node from stored state."""
         slurmd_info = machine.get_slurmd_info()
@@ -382,7 +350,7 @@ class SlurmdCharm(CharmBase):
                 else:
                     # Get numeric range of devices associated with this GRES resource. See:
                     # https://slurm.schedmd.com/gres.conf.html#OPT_File
-                    device_suffix = self._ranges_and_strides(sorted(devices))
+                    device_suffix = calculate_rs(devices)
                 gres_line = {
                     "Name": "gpu",
                     "Type": model,
