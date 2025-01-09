@@ -378,7 +378,7 @@ class SlurmdCharm(CharmBase):
             for model, devices in gpus.items():
                 # Build gres.conf line for this GPU model.
                 if len(devices) == 1:
-                    device_suffix = next(iter(devices))
+                    device_suffix = devices[0]
                 else:
                     # Get numeric range of devices associated with this GRES resource. See:
                     # https://slurm.schedmd.com/gres.conf.html#OPT_File

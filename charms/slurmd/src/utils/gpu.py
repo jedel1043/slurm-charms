@@ -99,7 +99,7 @@ def autoinstall() -> None:
         raise GPUOpsError(f"failed to install packages {install_packages}. reason: {e}")
 
 
-def get_all_gpu() -> dict[str, set[int]]:
+def get_all_gpu() -> dict[str, list[int]]:
     """Get the GPU devices on this node.
 
     Returns:
@@ -138,7 +138,7 @@ def get_all_gpu() -> dict[str, set[int]]:
         model = "_".join(model.split()).lower()
 
         minor_number = pynvml.nvmlDeviceGetMinorNumber(handle)
-        gpu_info[model] = gpu_info.get(model, set()) | {minor_number}
+        gpu_info[model] = gpu_info.get(model, []) + [minor_number]
 
     pynvml.nvmlShutdown()
     return gpu_info
