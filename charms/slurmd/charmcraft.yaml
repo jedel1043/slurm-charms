@@ -30,6 +30,12 @@ platforms:
 
 parts:
   charm:
+    build-packages:
+      - git
+      - libdrm-dev
+      - libkmod-dev
+      - libpci-dev
+      - pkgconf
     charm-binary-python-packages:
       - cryptography ~= 44.0.0
       - jsonschema ~= 4.23.0

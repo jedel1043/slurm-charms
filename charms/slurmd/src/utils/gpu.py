@@ -15,7 +15,11 @@
 """Manage GPU driver installation on compute node."""
 
 import logging
-from importlib import import_module
+
+# ubuntu-drivers requires apt_pkg for package operations
+import apt_pkg  # pyright: ignore [reportMissingImports]
+import pynvml
+import UbuntuDrivers.detect  # pyright: ignore [reportMissingImports]
 
 import charms.operator_libs_linux.v0.apt as apt
 
@@ -25,34 +29,29 @@ _logger = logging.getLogger(__name__)
 class GPUOpsError(Exception):
     """Exception raised when a GPU driver installation operation failed."""
 
+    @property
+    def message(self) -> str:
+        """Return message passed as argument to exception."""
+        return self.args[0]
+
 
 class GPUDriverDetector:
     """Detects GPU driver and kernel packages appropriate for the current hardware."""
 
     def __init__(self):
-        """Initialize detection attributes and interfaces."""
-        # Install ubuntu-drivers tool and Python NVML bindings
-        pkgs = ["ubuntu-drivers-common", "python3-pynvml"]
-        try:
-            apt.add_package(pkgs, update_cache=True)
-        except (apt.PackageNotFoundError, apt.PackageError) as e:
-            raise GPUOpsError(f"failed to install {pkgs} reason: {e}")
-
-        # ubuntu-drivers requires apt_pkg for package operations
-        self._detect = _import("UbuntuDrivers.detect")
-        self._apt_pkg = _import("apt_pkg")
-        self._apt_pkg.init()
+        """Initialize detection interfaces."""
+        apt_pkg.init()
 
     def _system_gpgpu_driver_packages(self) -> dict:
         """Detect the available GPGPU drivers for this node."""
-        return self._detect.system_gpgpu_driver_packages()
+        return UbuntuDrivers.detect.system_gpgpu_driver_packages()
 
     def _get_linux_modules_metapackage(self, driver) -> str:
         """Retrieve the modules metapackage for the combination of current kernel and given driver.
 
         e.g. linux-modules-nvidia-535-server-aws for driver nvidia-driver-535-server
         """
-        return self._detect.get_linux_modules_metapackage(self._apt_pkg.Cache(None), driver)
+        return UbuntuDrivers.detect.get_linux_modules_metapackage(apt_pkg.Cache(None), driver)
 
     def system_packages(self) -> list[str]:
         """Return a list of GPU drivers and kernel module packages for this node."""
@@ -114,12 +113,6 @@ def get_all_gpu() -> dict[str, list[int]]:
     gpu_info = {}
 
     try:
-        pynvml = _import("pynvml")
-    except ModuleNotFoundError:
-        _logger.info("cannot gather GPU info: pynvml module not installed")
-        return gpu_info
-
-    try:
         pynvml.nvmlInit()
     except pynvml.NVMLError as e:
         _logger.info("no GPU info gathered: drivers cannot be detected")
@@ -142,8 +135,3 @@ def get_all_gpu() -> dict[str, list[int]]:
 
     pynvml.nvmlShutdown()
     return gpu_info
-
-
-def _import(module):
-    """Wrap programmatic import of packages."""
-    return import_module(module)

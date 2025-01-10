@@ -15,7 +15,10 @@
 
 """Unit tests for the slurmd operator."""
 
-from unittest.mock import Mock, PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch  # noqa: I001
+
+# Must come before SlurmdCharm import
+from module_mocks import apt_pkg_mock, detect_mock  # noqa: F401
 
 from charm import SlurmdCharm
 from ops.model import ActiveStatus, BlockedStatus
@@ -53,23 +56,20 @@ class TestCharm(TestCase):
     @patch("utils.nhc.install")
     @patch("utils.service.override_service")
     @patch("charms.operator_libs_linux.v0.juju_systemd_notices.SystemdNotices.subscribe")
-    @patch("utils.gpu._import")
     @patch("charms.operator_libs_linux.v0.apt.add_package")
     @patch("ops.framework.EventBase.defer")
-    def test_install_success(self, defer, apt_mock, import_mock, *_) -> None:
+    def test_install_success(self, defer, apt_mock, *_) -> None:
         """Test install success behavior."""
         self.harness.charm._slurmd.install = Mock()
         self.harness.charm._slurmd.version = Mock(return_value="24.05.2-1")
 
         # GPU detection test setup
-        detect_mock = Mock()
         metapackage = "headless-no-dkms-535-server"
         linux_modules = "linux-modules-535-server"
         detect_mock.system_gpgpu_driver_packages.return_value = {
             "driver-535-server": {"recommended": True, "metapackage": metapackage}
         }
         detect_mock.get_linux_modules_metapackage.return_value = linux_modules
-        import_mock.return_value = detect_mock
 
         self.harness.charm.on.install.emit()
 
@@ -102,9 +102,14 @@ class TestCharm(TestCase):
         self.harness.charm.on.service_slurmd_stopped.emit()
         self.assertEqual(self.harness.charm.unit.status, BlockedStatus("slurmd not running"))
 
+    @patch("pynvml.nvmlShutdown")
+    @patch("pynvml.nvmlInit")
+    @patch("pynvml.nvmlDeviceGetHandleByIndex")
+    @patch("pynvml.nvmlDeviceGetMinorNumber")
+    @patch("pynvml.nvmlDeviceGetName")
+    @patch("pynvml.nvmlDeviceGetCount")
     @patch("utils.machine.get_slurmd_info")
-    @patch("utils.gpu._import")
-    def test_slurmctld_on_relation_created(self, import_mock, machine_mock) -> None:
+    def test_slurmctld_on_relation_created(self, machine, count, name, number, *_) -> None:
         """Test slurmctld relation create behavior."""
         # Compute node mock data
         node = {
@@ -116,14 +121,12 @@ class TestCharm(TestCase):
             "ThreadsPerCore": "2",
             "RealMemory": "31848",
         }
-        machine_mock.return_value = node
+        machine.return_value = node
 
         # GPU mock data
-        pynvml_mock = Mock()
-        pynvml_mock.nvmlDeviceGetCount.return_value = 4
-        pynvml_mock.nvmlDeviceGetName.side_effect = ["Tesla T4", "Tesla T4", "L40S", "L40S"]
-        pynvml_mock.nvmlDeviceGetMinorNumber.side_effect = [0, 1, 2, 3]
-        import_mock.return_value = pynvml_mock
+        count.return_value = 4
+        name.side_effect = ["Tesla T4", "Tesla T4", "L40S", "L40S"]
+        number.side_effect = [0, 1, 2, 3]
 
         relation_id = self.harness.add_relation("slurmctld", "slurmd")
 
