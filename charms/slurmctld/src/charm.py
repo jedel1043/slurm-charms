@@ -215,13 +215,18 @@ class SlurmctldCharm(CharmBase):
             event.fail(message=f"Error resuming {nodes}: {e.output}")
 
     def _on_slurmd_available(self, event: SlurmdAvailableEvent) -> None:
+        """Triggers when a slurmd unit joins the relation."""
         self._update_gres_conf(event)
         self._on_write_slurm_conf(event)
 
     def _on_slurmd_departed(self, event: SlurmdDepartedEvent) -> None:
-        # Lack of map between departing unit and NodeName complicates removal of node from gres.conf.
-        # Instead, rewrite full gres.conf with data from remaining units.
-        self._write_gres_conf(event)
+        """Triggers when a slurmd unit departs the relation.
+
+        Notes:
+            Lack of map between departing unit and NodeName complicates removal of node from gres.conf.
+            Instead, rewrite full gres.conf with data from remaining units.
+        """
+        self._refresh_gres_conf(event)
         self._on_write_slurm_conf(event)
 
     def _update_gres_conf(self, event: SlurmdAvailableEvent) -> None:
@@ -247,7 +252,7 @@ class SlurmctldCharm(CharmBase):
             with self._slurmctld.gres.edit() as config:
                 config.nodes[event.node_name] = gres_nodes
 
-    def _write_gres_conf(self, event: SlurmdDepartedEvent) -> None:
+    def _refresh_gres_conf(self, event: SlurmdDepartedEvent) -> None:
         """Write out current gres.conf configuration file for Generic Resource scheduling.
 
         Warnings:

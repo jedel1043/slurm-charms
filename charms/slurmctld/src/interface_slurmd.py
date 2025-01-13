@@ -144,9 +144,9 @@ class Slurmd(Object):
                             self.on.slurmd_available.emit(
                                 node_name=node_name, gres_info=node.get("gres")
                             )
-                            logger.debug(f"_on_relation_changed node_config = {node_config}")
+                            logger.debug("_on_relation_changed node_config = %s", node_config)
             else:
-                logger.debug(f"`node` data does not exist for unit: {unit}.")
+                logger.debug("`node` data does not exist for unit: %s.", unit)
         else:
             logger.debug("Unit doesn't exist on the relation.")
 
@@ -166,7 +166,7 @@ class Slurmd(Object):
         """Send NHC parameters to all slurmd."""
         # juju does not allow setting empty data/strings on the relation data,
         # so we set it to something that behaves like empty
-        logger.debug(f"## set_nhc_params: {params}")
+        logger.debug("## set_nhc_params: %s", params)
 
         if relations := self.framework.model.relations.get(self._relation_name):
             for relation in relations:
