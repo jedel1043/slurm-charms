@@ -23,8 +23,7 @@ _logger = logging.getLogger(__name__)
 def get_slurmd_info() -> dict[str, str | list[str]]:
     """Get machine info as reported by `slurmd -C`.
 
-    For details see:
-    https://slurm.schedmd.com/slurmd.html
+    For details see: https://slurm.schedmd.com/slurmd.html
     """
     try:
         r = subprocess.check_output(["slurmd", "-C"], text=True).strip()
@@ -40,4 +39,5 @@ def get_slurmd_info() -> dict[str, str | list[str]]:
             continue
 
         info[k] = v
+
     return info

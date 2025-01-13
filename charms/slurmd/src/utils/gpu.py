@@ -91,7 +91,7 @@ def autoinstall() -> None:
         _logger.info("no GPU drivers requiring installation")
         return
 
-    _logger.info(f"installing GPU driver packages: {install_packages}")
+    _logger.info("installing GPU driver packages: %s", install_packages)
     try:
         apt.add_package(install_packages)
     except (apt.PackageNotFoundError, apt.PackageError) as e:
@@ -116,7 +116,7 @@ def get_all_gpu() -> dict[str, list[int]]:
         pynvml.nvmlInit()
     except pynvml.NVMLError as e:
         _logger.info("no GPU info gathered: drivers cannot be detected")
-        _logger.debug(f"NVML init failed with reason: {e}")
+        _logger.debug("NVML init failed with reason: %s", e)
         return gpu_info
 
     gpu_count = pynvml.nvmlDeviceGetCount()
