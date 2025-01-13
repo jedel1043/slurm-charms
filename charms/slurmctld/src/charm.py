@@ -246,7 +246,7 @@ class SlurmctldCharm(CharmBase):
         if gres_info := event.gres_info:
             gres_nodes = []
             for resource in gres_info:
-                node = GRESNode(NodeName=str(event.node_name), **resource)
+                node = GRESNode(NodeName=event.node_name, **resource)
                 gres_nodes.append(node)
 
             with self._slurmctld.gres.edit() as config:
