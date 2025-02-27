@@ -37,6 +37,9 @@ def get_slurmd_info() -> dict[str, str | list[str]]:
         if k == "Gres":
             info[k] = v.split(",")
             continue
+        if k == "NodeName":
+            info["NodeHostname"] = v
+            continue
 
         info[k] = v
 

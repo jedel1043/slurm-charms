@@ -20,6 +20,8 @@ from ops import (
     StoredState,
     UpdateStatusEvent,
     WaitingStatus,
+    EventBase,
+    Handle,
     main,
 )
 from slurmutils import calculate_rs
@@ -35,6 +37,30 @@ from charms.operator_libs_linux.v0.juju_systemd_notices import (  # type: ignore
 
 logger = logging.getLogger(__name__)
 
+class NodeStateChangedEvent(EventBase):
+    """Emitted when the slurmd node state changed."""
+
+    def __init__(self, handle: Handle, new_state: str, reason: str, units: set(int)):
+        super().__init__(handle)
+
+        self.new_state = new_state
+        self.reason = reason
+        self.units = units
+
+    def snapshot(self):
+        """Snapshot the event data."""
+        return {
+            "new_state": self.new_state,
+            "reason": self.reason,
+            "units": list(self.units)
+        }
+
+    def restore(self, snapshot):
+        """Restore the snapshot of the event data."""
+        self.new_state = snapshot.get("new_state")
+        self.reason = snapshot.get("reason")
+        self.units = set(snapshot.get("units"))
+
 
 class SlurmdCharm(CharmBase):
     """Slurmd lifecycle events."""
@@ -44,6 +70,8 @@ class SlurmdCharm(CharmBase):
     def __init__(self, *args, **kwargs):
         """Init _stored attributes and interfaces, observe events."""
         super().__init__(*args, **kwargs)
+
+        self.on.define_event("node_state_changed", NodeStateChangedEvent)
 
         self._stored.set_default(
             munge_key=str(),
@@ -69,8 +97,9 @@ class SlurmdCharm(CharmBase):
             self._slurmctld.on.slurmctld_unavailable: self._on_slurmctld_unavailable,
             self.on.service_slurmd_started: self._on_slurmd_started,
             self.on.service_slurmd_stopped: self._on_slurmd_stopped,
-            self.on.node_configured_action: self._on_node_configured_action,
+            self.on.set_state_action: self._on_set_state_action,
             self.on.node_config_action: self._on_node_config_action_event,
+            self.on.node_state_changed: self._on_node_state_changed,
         }
         for event, handler in event_handler_bindings.items():
             self.framework.observe(event, handler)
@@ -227,13 +256,54 @@ class SlurmdCharm(CharmBase):
         """Handle event emitted by systemd after slurmd daemon is stopped."""
         self.unit.status = BlockedStatus("slurmd not running")
 
-    def _on_node_configured_action(self, _: ActionEvent) -> None:
-        """Remove node from DownNodes and mark as active."""
+    def _on_set_state_action(self, event: ActionEvent) -> None:
+        """Set the node state of a set of units."""
+        if not self.unit.is_leader():
+            event.fail("this action can only be run from the leader unit")
+            return
+
+        new_state: str = event.params["state"]
+        reason: str = event.params.get("reason", "")
+
+        if not (nodes := event.params.get("nodes")):
+            self.on.node_state_changed.emit(new_state=new_state, reason=reason, units=set())
+            return
+
+        units = set()
+        for node_range in nodes.split(","):
+            node_range = node_range.split("-")
+            length = len(node_range)
+            try:
+                match len(node_range):
+                    case 1:
+                        unit = int(node_range[0])
+                        units.add(unit)
+                    case 2:
+                        start, end = int(node_range[0]), int(node_range[1])
+                        if start > end:
+                            start, end = end, start
+                        units.update(range(start, end + 1))
+                    case _:
+                        event.fail("invalid syntax for node range")
+                        return
+            except ValueError as e:
+                event.fail("{e}")
+                return
+
+        self.on.node_state_changed.emit(new_state=new_state, reason=reason, units=units)
+
+    def _on_node_state_changed(self, event: NodeStateChangedEvent) -> None:
+        """Set the node state of the current unit."""
+        unit_number = self.unit.name.split("/", 1)[1]
+        if event.units and not unit_number in event.units:
+            return
+
         # Trigger reconfiguration of slurmd node.
-        self._new_node = False
+        self._node_state = event.new_state
+        self._node_state_reason = event.reason
         self._slurmctld.set_node()
         self._slurmd.service.restart()
-        logger.debug("### This node is not new anymore")
+        logger.debug("### Transitioned node `%s` to state `%s` with reason `%s", self.unit.name, event.new_state, event.reason)
 
     def _on_show_nhc_config(self, event: ActionEvent) -> None:
         """Show current nhc.conf."""
@@ -312,14 +382,24 @@ class SlurmdCharm(CharmBase):
         self._stored.user_supplied_node_parameters = node_parameters
 
     @property
-    def _new_node(self) -> bool:
-        """Get the new_node from stored state."""
-        return True if self._stored.new_node is True else False
+    def _node_state(self) -> str:
+        """Get the node state from stored state."""
+        return self._stored.node_state or "DOWN"
 
-    @_new_node.setter
-    def _new_node(self, new_node: bool) -> None:
+    @_node_state.setter
+    def _node_state(self, new_state: str) -> None:
         """Set the new_node in stored state."""
-        self._stored.new_node = new_node
+        self._stored.node_state = new_state
+    
+    @property
+    def _node_state_reason(self) -> str:
+        """Get the node state reason from stored state."""
+        return self._stored.node_state_reason or ""
+
+    @_node_state_reason.setter
+    def _node_state_reason(self, reason: str) -> None:
+        """Set the node state reason in stored state."""
+        self._stored.node_state_reason = reason
 
     def _check_status(self) -> bool:
         """Check if we have all needed components.
@@ -354,9 +434,10 @@ class SlurmdCharm(CharmBase):
             logger.info("rebooting unit %s", self.unit.name)
             self.unit.reboot(now)
 
-    def get_node(self) -> Dict[Any, Any]:
+    def get_node(self, state: str) -> Dict[Any, Any]:
         """Get the node from stored state."""
         slurmd_info = machine.get_slurmd_info()
+        slurmd_info["NodeName"] = self.unit.name.replace('/', '-')
 
         gres_info = []
         if gpus := gpu.get_all_gpu():
@@ -384,7 +465,10 @@ class SlurmdCharm(CharmBase):
                 "MemSpecLimit": "1024",
                 **self._user_supplied_node_parameters,
             },
-            "new_node": self._new_node,
+            "node_state": {
+                "state": self._node_state,
+                "reason": self._node_state_reason
+            }
             # Do not include GRES configuration if no GPUs detected.
             **({"gres": gres_info} if len(gres_info) > 0 else {}),
         }

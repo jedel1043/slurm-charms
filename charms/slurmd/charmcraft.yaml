@@ -83,8 +83,33 @@ config:
         ```
 
 actions:
-  node-configured:
-    description: Remove a node from DownNodes when the reason is `New node`.
+  set-state:
+    description: Set the state of a node or set of nodes.
+    params:
+      state:
+        type: string
+        description: |
+          New state that the node should transition to.
+          Possible values are specified by https://slurm.schedmd.com/slurm.conf.html#OPT_State.
+      reason:
+        type: string
+        description: |
+          Identifies the reason for a node being in a down state.
+      nodes:
+        type: string
+        description: |
+          A comma-separated list of unit ranges that will transition into the specified state.
+          A range without dashes represents an individual node.
+          Omitting this parameter is equivalent to changing the state of all the nodes in the partition.
+
+          Example usage:
+            - "1": Change the state of the node slurmd/1.
+            - "0,3": Change the state of the nodes slurmd/0 and slurmd/3.
+            - "2-4": Change the state of the nodes slurmd/2, slurmd/3, and slurmd/4.
+            - "1,3-5": Change the state of the nodes slurmd/1, slurmd/3, slurmd/4, and slurmd/5.
+    additionalProperties: false
+    required:
+      - state
 
   node-config:
     description: >

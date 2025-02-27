@@ -210,7 +210,7 @@ class Slurmd(Object):
         """
         partitions = {}
         nodes = {}
-        new_nodes = []
+        down_nodes: dict[(str, str), set(str)] = {}
 
         if relations := self.framework.model.relations.get(self._relation_name):
             for relation in relations:
@@ -244,9 +244,14 @@ class Slurmd(Object):
                                     k: v for k, v in node_config.items() if k not in ["NodeName"]
                                 }
 
-                                # Account for new node.
-                                if node.get("new_node"):
-                                    new_nodes.append(node_name)
+                                # Account for down nodes.
+                                state = node["node_state"]["state"]
+                                reason = node["node_state"]["reason"]
+                                if state not in ["CLOUD", "UNKNOWN"]:
+                                    down_nodes[(state, reason)] = down_nodes.get((state, reason), set())
+                                    down_nodes[(state, reason)].add(node_name)
+                                elif state != "UNKNOWN":
+                                    nodes[node_name]["State"] = state
 
                     # Ensure we have a unique list and add it to the partition.
                     if len(partition_nodes) > 0:
@@ -258,13 +263,13 @@ class Slurmd(Object):
 
                     partitions[partition_name] = partition_parameters
 
-        # If we have down nodes because they are new nodes, then set them here.
-        new_node_down_nodes = (
-            [{"DownNodes": list(set(new_nodes)), "State": "DOWN", "Reason": "New node."}]
-            if len(new_nodes) > 0
+        # If we have down nodes, then set them here.
+        down_nodes = (
+            [{"DownNodes": list(nodes), "State": state, "Reason": reason} for (state, reason), nodes in down_nodes.items]
+            if down_nodes
             else []
         )
-        return {"DownNodes": new_node_down_nodes, "Nodes": nodes, "Partitions": partitions}
+        return {"DownNodes": down_nodes, "Nodes": nodes, "Partitions": partitions}
 
     def get_all_gres_info(self) -> Dict[str, Any]:
         """Return GRES configuration for all currently related compute nodes."""
