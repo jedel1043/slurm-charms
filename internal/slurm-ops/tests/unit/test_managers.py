@@ -260,6 +260,46 @@ class TestManager:
         mock_gethostname.return_value = "yowzah"
         assert manager.hostname == "yowzah"
 
+    @pytest.mark.parametrize(
+        ("arch", "expected"),
+        [
+            ("x86_64", "/usr/lib/x86_64-linux-gnu/slurm-wlm"),
+            ("aarch64", "/usr/lib/aarch64-linux-gnu/slurm-wlm"),
+        ],
+    )
+    def test_plugin_dir(
+        self, mocker: MockerFixture, mock_manager, arch: str, expected: str
+    ) -> None:
+        """Test the `<manager>.plugin_dir` property resolves the multiarch triplet."""
+        mocker.patch("platform.machine", return_value=arch)
+        manager, _ = mock_manager
+
+        # `plugin_dir` is a `cached_property`; drop the cache to ensure the patched
+        # architecture is picked up on each parameterized invocation.
+        manager.__dict__.pop("plugin_dir", None)
+
+        assert manager.plugin_dir == expected
+
+    def test_plugin_dir_oserror(self, mocker: MockerFixture, mock_manager) -> None:
+        """Test the `<manager>.plugin_dir` property returns `None` on `OSError`."""
+        mocker.patch(
+            "platform.machine", side_effect=OSError("could not determine machine architecture")
+        )
+        manager, _ = mock_manager
+
+        manager.__dict__.pop("plugin_dir", None)
+
+        assert manager.plugin_dir is None
+
+    def test_plugin_dir_empty(self, mocker: MockerFixture, mock_manager) -> None:
+        """Test the `<manager>.plugin_dir` property returns `None` when architecture is empty."""
+        mocker.patch("platform.machine", return_value="")
+        manager, _ = mock_manager
+
+        manager.__dict__.pop("plugin_dir", None)
+
+        assert manager.plugin_dir is None
+
 
 class TestSackdManager:
     """Test additional behavior of the `SackdManager` class."""

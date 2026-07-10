@@ -137,7 +137,8 @@ class SlurmdbdCharm(ops.CharmBase):
             config.dbd_port = SLURMDBD_PORT
             config.log_file = "/var/log/slurm/slurmdbd.log"
             config.pid_file = "/var/run/slurmdbd/slurmdbd.pid"
-            config.plugin_dir = ["/usr/lib/x86_64-linux-gnu/slurm-wlm"]
+            if plugin_dir := self.slurmdbd.plugin_dir:
+                config.plugin_dir = [plugin_dir]
             config.slurm_user = self.slurmdbd.user
             config.storage_type = "accounting_storage/mysql"
 

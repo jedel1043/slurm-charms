@@ -286,7 +286,8 @@ class SlurmctldCharm(ops.CharmBase):
                     config.gres_types = ["gpu"]
                     config.max_node_count = 65533
                     config.metrics_type = "metrics/openmetrics"
-                    config.plugin_dir = ["/usr/lib/x86_64-linux-gnu/slurm-wlm"]
+                    if plugin_dir := self.slurmctld.plugin_dir:
+                        config.plugin_dir = [plugin_dir]
                     config.plug_stack_config = "/etc/slurm/plugstack.conf.d/plugstack.conf"
                     config.proctrack_type = (
                         "proctrack/linuxproc" if is_container() else "proctrack/cgroup"

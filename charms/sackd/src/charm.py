@@ -69,7 +69,7 @@ class SackdCharm(ops.CharmBase):
             self,
             PROMETHEUS_SCRAPE_INTEGRATION_NAME,
             alert_rules_path="./src/cos/alert_rules/prometheus",
-            jobs=[NODE_EXPORTER_SCRAPE_CONFIG]
+            jobs=[NODE_EXPORTER_SCRAPE_CONFIG],
         )
 
     @refresh

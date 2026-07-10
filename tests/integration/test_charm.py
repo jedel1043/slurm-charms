@@ -17,6 +17,7 @@
 
 import json
 import logging
+import platform
 import textwrap
 
 import jubilant
@@ -34,6 +35,7 @@ from constants import (
 )
 
 logger = logging.getLogger(__name__)
+ARCH = platform.machine()
 
 
 @pytest.mark.order(1)
@@ -54,28 +56,35 @@ def test_deploy(
         SLURMCTLD_APP_NAME,
         base=base,
         channel=DEFAULT_SLURM_CHARM_CHANNEL if isinstance(slurmctld, str) else None,
-        constraints={"virt-type": "virtual-machine"},
+        constraints={"virt-type": "virtual-machine", "arch": ARCH},
         config={"slurm-conf-parameters": "SlurmctldTimeout=10\n"},
     )
     juju.deploy(
         slurmd,
         SLURMD_APP_NAME,
         base=base,
+        constraints={"arch": ARCH},
         channel=DEFAULT_SLURM_CHARM_CHANNEL if isinstance(slurmd, str) else None,
     )
     juju.deploy(
         slurmdbd,
         SLURMDBD_APP_NAME,
         base=base,
+        constraints={"arch": ARCH},
         channel=DEFAULT_SLURM_CHARM_CHANNEL if isinstance(slurmdbd, str) else None,
     )
     juju.deploy(
         slurmrestd,
         SLURMRESTD_APP_NAME,
         base=base,
+        constraints={"arch": ARCH},
         channel=DEFAULT_SLURM_CHARM_CHANNEL if isinstance(slurmrestd, str) else None,
     )
-    juju.deploy("mysql", MYSQL_APP_NAME)
+    juju.deploy(
+        "mysql",
+        MYSQL_APP_NAME,
+        constraints={"arch": ARCH},
+    )
 
     # Integrate applications together.
     juju.integrate(SACKD_APP_NAME, SLURMCTLD_APP_NAME)
@@ -404,7 +413,7 @@ def test_job_submission(juju: jubilant.Juju) -> None:
     # Get the hostname of the compute node via `juju exec`.
     slurmd_result = juju.exec("hostname -s", unit=slurmd_unit)
     # Get the hostname of the compute node from a Slurm job.
-    sackd_result = juju.exec(f"srun --partition {SLURMD_APP_NAME} hostname -s", unit=sackd_unit)
+    sackd_result = juju.exec(f"srun --chdir /tmp --partition {SLURMD_APP_NAME} hostname -s", unit=sackd_unit)
     assert sackd_result.stdout == slurmd_result.stdout
 
 
@@ -487,7 +496,7 @@ def test_gpu_job_submission(juju: jubilant.Juju) -> None:
     for attempt in attempts:
         with attempt:
             sackd_result = juju.exec(
-                f"srun --partition {SLURMD_APP_NAME} --gres gpu:1 hostname -s", unit=sackd_unit
+                f"srun --chdir /tmp --partition {SLURMD_APP_NAME} --gres gpu:1 hostname -s", unit=sackd_unit
             )
             assert sackd_result.stdout == slurmd_result.stdout
 

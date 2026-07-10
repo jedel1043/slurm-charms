@@ -23,6 +23,7 @@ import base64
 import datetime
 import json
 import logging
+import platform
 import secrets
 import shutil
 import socket
@@ -748,6 +749,24 @@ class SlurmManager(ABC):
     def hostname(self) -> str:
         """Get the hostname of the machine the managed Slurm service is running on."""
         return socket.gethostname().split(".")[0]
+
+    @cached_property
+    def plugin_dir(self) -> str | None:
+        """Get the architecture-specific directory where Slurm plugins are installed.
+
+        Returns:
+            The plugin directory path, or `None` if the machine architecture
+            could not be determined.
+        """
+        try:
+            arch = platform.machine()
+        except OSError:
+            return None
+        if not arch:
+            return None
+        # TODO: verify that this is roughly the shape of the library paths for
+        # ubuntu architectures.
+        return f"/usr/lib/{arch}-linux-gnu/slurm-wlm"
 
     @cached_property
     def node_exporter(self) -> NodeExporterManager:
