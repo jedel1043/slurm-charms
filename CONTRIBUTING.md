@@ -88,6 +88,48 @@ baseline integration test suite. However, we strongly recommend running
 `just integration -- --run-high-availability` locally before submitting, as the full suite
 includes additional coverage to catch more complex cases relating to charm scaling.
 
+### Testing against a new Slurm PPA
+
+It is possible to test future versions of Slurm by using a PPA that packages
+that version. To do this, write a cloud-config file that registers the PPA and
+pass its path to the integration tests by setting the `SLURM_MODEL_CLOUDINIT_USERDATA`
+environment variable:
+
+```shell
+SLURM_MODEL_CLOUDINIT_USERDATA=/path/to/cloud-config.yaml just integration
+```
+
+When pytest-jubilant-bdd runs the `I add model 'slurm'` step, it reads the file
+the variable points to and passes its contents to Juju as `cloudinit-userdata`
+model config, and Juju applies it to every machine in the test model. Note that if
+the variable is set but does not point to an existing file, the tests only log a
+warning and run without the custom cloud-init. For example, the following
+cloud-config adds the [ubuntu-hpc Slurm 26.05 PPA] so that the test
+machines install Slurm 26.05 packages instead of the version in the Ubuntu 26.04
+(Resolute) archive:
+
+```yaml
+#cloud-config
+apt:
+  sources:
+    slurm-wlm-26.05:
+      source: ppa:ubuntu-hpc/slurm-wlm-26.05
+package_update: true
+```
+
+Note that provisioning is slower with a PPA: every machine runs cloud-init with a
+full package upgrade before the charms install, and the extra PPA source adds more
+apt work on top. Increase the wait timeout so deployment checks don't give up
+early, and pass `--juju-bdd-no-teardown` if you want to keep the model around for
+debugging:
+
+```shell
+SLURM_MODEL_CLOUDINIT_USERDATA=/path/to/cloud-config.yaml just integration -- \
+    --juju-bdd-wait-timeout=1200 --juju-bdd-no-teardown
+```
+
+[ubuntu-hpc Slurm 26.05 PPA]: https://launchpad.net/~ubuntu-hpc/+archive/ubuntu/slurm-wlm-26.05
+
 ## Maintenance information
 
 This repository uses Github Actions to handle some tasks related to the maintenance of the repository.

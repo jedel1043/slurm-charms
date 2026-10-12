@@ -99,6 +99,7 @@ def job_submission(context: Context, login_unit: str, compute_unit: str) -> None
             f"job '{job_name}' did not complete, states: {states}"
         )
 
+
 @then(parsers.parse("the command '{command}' on unit '{unit}' as user '{user}' succeeds"))
 def command_as_user_succeeds(context: Context, command: str, unit: str, user: str) -> None:
     """Assert a command run as an unprivileged user exits successfully."""
