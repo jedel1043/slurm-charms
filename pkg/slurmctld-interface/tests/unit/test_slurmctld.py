@@ -85,7 +85,11 @@ class MockSlurmctldRequirerCharm(ops.CharmBase):
     def __init__(self, framework: ops.Framework) -> None:
         super().__init__(framework)
 
-        self.slurmctld = SlurmctldRequirer(self, SLURMCTLD_INTEGRATION_NAME)
+        self.slurmctld = SlurmctldRequirer(
+            self,
+            SLURMCTLD_INTEGRATION_NAME,
+            required_app_data={"auth_secret_id", "jwt_secret_id", "controllers"},
+        )
 
         framework.observe(
             self.slurmctld.on.slurmctld_connected,

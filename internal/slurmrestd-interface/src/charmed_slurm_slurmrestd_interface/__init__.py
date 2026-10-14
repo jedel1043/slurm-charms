@@ -35,6 +35,16 @@ from charmed_slurm_slurmctld_interface import (
     controller_ready,
 )
 
+_REQUIRED_APP_DATA = {
+    "auth_secret_id": lambda value: value != '""',
+    "slurmconfig": lambda value: value != "{}",
+}
+
+
+def _slurmrestd_app_data_validator(data: ops.RelationDataContent) -> bool:
+    """Validate controller data sent by `slurmctld` stored in the `slurmrestd` integration."""
+    return all(validate(data[k]) for k, validate in _REQUIRED_APP_DATA.items())
+
 
 class SlurmrestdConnectedEvent(ops.RelationEvent):
     """Event emitted when a new `slurmrestd` application is connected to `slurmctld`."""
@@ -55,7 +65,10 @@ class SlurmrestdProvider(SlurmctldRequirer):
 
     def __init__(self, charm: ops.CharmBase, /, integration_name: str) -> None:
         super().__init__(
-            charm, integration_name, required_app_data={"auth_secret_id", "slurmconfig"}
+            charm,
+            integration_name,
+            required_app_data=set(_REQUIRED_APP_DATA),
+            app_data_validator=_slurmrestd_app_data_validator,
         )
 
 

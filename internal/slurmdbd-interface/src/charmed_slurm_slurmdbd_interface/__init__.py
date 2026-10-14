@@ -41,6 +41,16 @@ from charmed_slurm_slurmctld_interface import (
     controller_ready,
 )
 
+_REQUIRED_APP_DATA = {
+    "auth_secret_id": lambda value: value != '""',
+    "jwt_secret_id": lambda value: value != '""',
+}
+
+
+def _slurmdbd_app_data_validator(data: ops.RelationDataContent) -> bool:
+    """Validate controller data sent by `slurmctld` stored in the `slurmdbd` integration."""
+    return all(validate(data[k]) for k, validate in _REQUIRED_APP_DATA.items())
+
 
 @dataclass(frozen=True)
 class DatabaseData:
@@ -103,7 +113,10 @@ class SlurmdbdProvider(SlurmctldRequirer):
 
     def __init__(self, charm: ops.CharmBase, /, integration_name: str) -> None:
         super().__init__(
-            charm, integration_name, required_app_data={"auth_secret_id", "jwt_secret_id"}
+            charm,
+            integration_name,
+            required_app_data=set(_REQUIRED_APP_DATA),
+            app_data_validator=_slurmdbd_app_data_validator,
         )
 
     @leader
@@ -148,7 +161,12 @@ class SlurmdbdRequirer(SlurmctldProvider):
     on = _SlurmdbdRequirerEvents()  # type: ignore
 
     def __init__(self, charm: ops.CharmBase, /, integration_name: str) -> None:
-        super().__init__(charm, integration_name, required_app_data={"hostname"})
+        super().__init__(
+            charm,
+            integration_name,
+            required_app_data={"hostname"},
+            app_data_validator=lambda data: data["hostname"] != '""',
+        )
 
         self.framework.observe(
             self.charm.on[self._integration_name].relation_created,
