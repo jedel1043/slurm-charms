@@ -929,9 +929,10 @@ def integration_tests_cli(
     stage_charms(charms, repository)
     build_cli(charms, packages, repository=repository)
 
-    local_charms = {}
+    charm_paths = {}
     for charm in charms:
-        local_charms[f"LOCAL_{charm.name.upper().replace('-', '_')}"] = charm.charm_path
+        env_var = f"{charm.name.upper().replace('-', '_')}_CHARM_PATH"
+        charm_paths[env_var] = charm.charm_path
 
     uv_run(
         [
@@ -945,7 +946,7 @@ def integration_tests_cli(
             "./tests/integration",
         ]
         + list(rest),
-        env={"PYTHONPATH": LIBS_CHARM_PATH / "lib", **os.environ, **local_charms},
+        env={"PYTHONPATH": LIBS_CHARM_PATH / "lib", **os.environ, **charm_paths},
     )
 
 

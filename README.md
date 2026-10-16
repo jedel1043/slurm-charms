@@ -62,14 +62,15 @@ of computer resources to run them. We usually test with at least 4 cores and 16 
 free to experiment!
 
 ```shell
-just repo integration
+# --juju-bdd-wait-timeout gives the base slurm cluster sufficient time to deploy.
+just repo integration -- --juju-bdd-wait-timeout=900
 ```
 
 The integration tests for `slurmctld` high availability functionality require more time and computer
 resources to run so are optionally gated behind a flag:
 
 ```shell
-just repo integration -- --run-high-availability
+just repo integration -- --run-high-availability --juju-bdd-wait-timeout=1200
 ```
 
 If you're interested in contributing, take a look at our [contributing guidelines](./CONTRIBUTING.md).

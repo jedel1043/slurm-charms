@@ -50,12 +50,8 @@ jobs:
       - run: just unit
 
   integration-test:
-    name: Integration tests (LXD) | ${{ matrix.bases }}
+    name: Integration tests (LXD)
     needs: [ci, unit-test]
-    strategy:
-      fail-fast: true
-      matrix:
-        bases: [ubuntu@26.04]
     # xlarge runner used for nightly and HA-enabled tests. Standard ubuntu runner otherwise
     runs-on: ${{ (github.event_name == 'schedule' || inputs.enable_ha) && 'self-hosted-linux-amd64-noble-xlarge' || 'ubuntu-26.04' }}
     steps:
@@ -92,4 +88,4 @@ jobs:
           if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.enable_ha }}" == "true" ]]; then
             ARGS+=("--run-high-availability")
           fi
-          just integration -- --charm-base=${{ matrix.bases }} ${ARGS[*]}
+          just integration -- --juju-bdd-wait-timeout=1200 ${ARGS[*]}
