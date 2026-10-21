@@ -24,7 +24,7 @@ from aiosmtpd.controller import Controller
 from constants import NETWORK_INTERFACE, SLURMD_APP_NAME, SMTP_SERVER_PORT
 from pytest_bdd import parsers, then
 from pytest_jubilant_bdd import Context
-from utils import MailHandler, interface_ipv4
+from utils import MailHandler, assert_command_denied, exec_as_user, interface_ipv4
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,9 @@ def smtp_handler() -> Iterator[MailHandler]:
 
 
 @then(
-    parsers.parse(
-        "a slurm srun job submitted from unit '{login_unit}' runs on unit '{compute_unit}'"
+    parsers.re(
+        r"a (?i:slurm) srun job submitted from unit '(?P<login_unit>[^']+)' "
+        r"runs on unit '(?P<compute_unit>[^']+)'"
     )
 )
 def job_submission(context: Context, login_unit: str, compute_unit: str) -> None:
@@ -97,6 +98,61 @@ def job_submission(context: Context, login_unit: str, compute_unit: str) -> None
         assert any("COMPLETED" in s for s in states), (
             f"job '{job_name}' did not complete, states: {states}"
         )
+
+@then(parsers.parse("the command '{command}' on unit '{unit}' as user '{user}' succeeds"))
+def command_as_user_succeeds(context: Context, command: str, unit: str, user: str) -> None:
+    """Assert a command run as an unprivileged user exits successfully."""
+    result = exec_as_user(context, command, unit, user)
+    assert result.success, (
+        f"'{command}' as '{user}' on '{unit}' failed "
+        f"(rc={result.return_code}): {result.stderr.strip()}"
+    )
+
+
+@then(parsers.parse("the command '{command}' on unit '{unit}' as user '{user}' is denied"))
+def command_as_user_is_denied(context: Context, command: str, unit: str, user: str) -> None:
+    """Assert a command run as an unprivileged user is rejected on authorization grounds."""
+    result = exec_as_user(context, command, unit, user)
+    assert_command_denied(result, command, unit, user)
+
+
+@then(
+    parsers.parse(
+        "the output of '{command}' on unit '{unit}' as user '{user}' contains '{expected}'"
+    )
+)
+def output_as_user_contains(
+    context: Context, command: str, unit: str, user: str, expected: str
+) -> None:
+    """Assert the output of a command run as an unprivileged user contains text."""
+    result = exec_as_user(context, command, unit, user)
+    output = f"{result.stdout}\n{result.stderr}"
+    assert expected in output, (
+        f"expected '{expected}' in output of '{command}' as '{user}' on '{unit}', "
+        f"got: {output.strip()}"
+    )
+
+
+@then(
+    parsers.parse(
+        "the output of '{command}' on unit '{unit}' as user '{user}' does not contain "
+        "'{unexpected}'"
+    )
+)
+def output_as_user_does_not_contain(
+    context: Context, command: str, unit: str, user: str, unexpected: str
+) -> None:
+    """Assert the output of a command run as an unprivileged user lacks text."""
+    result = exec_as_user(context, command, unit, user)
+    assert result.success, (
+        f"'{command}' as '{user}' on '{unit}' failed "
+        f"(rc={result.return_code}): {result.stderr.strip()}"
+    )
+    output = f"{result.stdout}\n{result.stderr}"
+    assert unexpected not in output, (
+        f"unexpected '{unexpected}' in output of '{command}' as '{user}' on '{unit}': "
+        f"{output.strip()}"
+    )
 
 
 def pytest_addoption(parser) -> None:

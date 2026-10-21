@@ -23,7 +23,7 @@ description: |-
   relied on by every subsequent feature.
 scenarios:
   - |-
-    Deploy the slurm cluster
+    Deploy the Slurm cluster
 
     Given I add model 'slurm'
     And I switch to model 'slurm'
@@ -64,7 +64,7 @@ scenarios:
   - |-
     Slurm services are active within all units
 
-    Then the slurm systemd service is active on all slurm units
+    Then the Slurm systemd service is active on all Slurm units
   - |-
     Slurm metrics endpoint is accessible
 
@@ -109,6 +109,120 @@ scenarios:
     Then the slurmd node for unit 'compute/0' has state containing 'IDLE' and reason ""
 
 ---
+feature: "Slurm user authorization"
+type: security
+status: implemented
+risk: edge
+description: |-
+  Unprivileged users may query the scheduler and mint JWT tokens for
+  themselves but cannot administer the cluster, control its services,
+  modify accounting, mint tokens for other users, or tamper with
+  configuration and logs.
+background: |-
+  Given 'login' is deployed
+  And 'controller' is deployed
+  And 'compute' is deployed
+  And 'database' is deployed
+  And 'rest-api' is deployed
+scenarios:
+  - |-
+    Unprivileged user can query the scheduler
+
+    Then the command 'sinfo' on unit 'login/0' as user 'nobody' succeeds
+  - |-
+    Unprivileged user cannot reconfigure Slurm
+
+    Then the command 'scontrol reconfigure' on unit 'login/0' as user 'nobody' is denied
+    And the command 'scontrol create partitionname=authz-test nodes=compute-0' on unit 'login/0' as user 'nobody' is denied
+    And the output of 'sinfo -h -o %P' on unit 'login/0' as user 'nobody' does not contain 'authz-test'
+  - |-
+    Unprivileged user cannot change node state
+
+    Then the command 'scontrol update nodename=compute-0 state=drain reason=authz-test' on unit 'login/0' as user 'nobody' is denied
+    And the output of 'sinfo -h -o %T -n compute-0' on unit 'login/0' as user 'nobody' contains 'idle'
+  - |-
+    Unprivileged user cannot control Slurm services
+
+    Then the command 'systemctl restart slurmctld' on unit 'controller/0' as user 'nobody' is denied
+    And the command 'systemctl is-active --quiet slurmctld' on unit 'controller/0' as user 'nobody' succeeds
+    And the command 'systemctl stop slurmd' on unit 'compute/0' as user 'nobody' is denied
+    And the command 'systemctl is-active --quiet slurmd' on unit 'compute/0' as user 'nobody' succeeds
+  - |-
+    Unprivileged user cannot tamper with Slurm configuration or logs
+
+    Then the command 'echo tampered >> /etc/slurm/slurm.conf' on unit 'controller/0' as user 'nobody' is denied
+    And the command 'grep -c tampered /etc/slurm/slurm.conf | grep -x 0' on unit 'controller/0' as user 'nobody' succeeds
+    And the command 'echo tampered >> /var/log/slurm/slurmctld.log' on unit 'controller/0' as user 'nobody' is denied
+  - |-
+    Unprivileged user cannot modify accounting
+
+    Then the command 'sacctmgr -i delete account nonexistent-authz-test' on unit 'login/0' as user 'nobody' is denied
+    And the command 'sacctmgr -i add qos authz-test' on unit 'login/0' as user 'nobody' is denied
+  - |-
+    Unprivileged user can mint a jwt token for themselves
+
+    Then the command 'scontrol token' on unit 'login/0' as user 'nobody' succeeds
+  - |-
+    Unprivileged user cannot mint jwt tokens for other users
+
+    Then the command 'scontrol token username=root' on unit 'login/0' as user 'nobody' is denied
+  - |-
+    Unprivileged user cannot cancel another user's job
+
+    Given a Slurm job is submitted from unit 'login/0' as user 'ubuntu'
+    Then the submitted job cannot be cancelled by user 'nobody' from unit 'login/0'
+    And the submitted job is still running
+  - |-
+    Unprivileged user cannot run a job as another user
+
+    Then the command 'sbatch --uid=0 --chdir=/tmp --wrap="id -un"' on unit 'login/0' as user 'nobody' is denied
+    And a job run from unit 'login/0' as user 'nobody' executes as that user
+  - |-
+    Unauthenticated slurmrestd request is denied
+
+    Then an unauthenticated request to the slurmrestd API from unit 'rest-api/0' is rejected with status '401'
+
+---
+feature: "Slurm secret and credential protection"
+type: security
+status: implemented
+risk: edge
+description: |-
+  Slurm secret files are owner-only with the correct per-charm service
+  owner and are unreadable by unprivileged users. The accounting database
+  password stays confined to its 0600 slurmdbd.conf file.
+background: |-
+  Given 'login' is deployed
+  And 'controller' is deployed
+  And 'compute' is deployed
+  And 'database' is deployed
+  And 'rest-api' is deployed
+scenarios:
+  - |-
+    Auth key file is owner-only with the correct owner on every Slurm unit
+
+    Then the file '/etc/slurm/slurm.jwks' on unit 'login/0' has mode '600' and owner 'slurm'
+    And the file '/etc/slurm/slurm.jwks' on unit 'controller/0' has mode '600' and owner 'slurm'
+    And the file '/etc/slurm/slurm.jwks' on unit 'database/0' has mode '600' and owner 'slurm'
+    And the file '/etc/slurm/slurm.jwks' on unit 'compute/0' has mode '600' and owner 'root'
+    And the file '/etc/slurm/slurm.jwks' on unit 'rest-api/0' has mode '600' and owner 'slurmrestd'
+  - |-
+    JWT signing key file is owner-only where it exists
+
+    Then the file '/etc/slurm/jwt_hs256.key' on unit 'controller/0' has mode '600' and owner 'slurm'
+    And the file '/etc/slurm/jwt_hs256.key' on unit 'database/0' has mode '600' and owner 'slurm'
+  - |-
+    Unprivileged user cannot read Slurm key material
+
+    Then the command 'cat /etc/slurm/slurm.jwks' on unit 'controller/0' as user 'nobody' is denied
+    And the command 'cat /etc/slurm/jwt_hs256.key' on unit 'controller/0' as user 'nobody' is denied
+  - |-
+    Database password file is owner-only and unreadable by unprivileged users
+
+    Then the file '/etc/slurm/slurmdbd.conf' on unit 'database/0' has mode '600' and owner 'slurm'
+    And the command 'cat /etc/slurm/slurmdbd.conf' on unit 'database/0' as user 'nobody' is denied
+
+---
 feature: "Slurm key rotation"
 type: functional
 status: implemented
@@ -126,21 +240,21 @@ scenarios:
   - |-
     Rotate auth key across the cluster
 
-    Given I capture the slurm auth JWKS key from unit 'controller/0'
+    Given I capture the Slurm auth JWKS key from unit 'controller/0'
     When I run action 'rotate-auth-key' on unit 'controller/0' with an extended timeout
     Then the workload status for app 'login' is 'active'
     And the workload status for app 'controller' is 'active'
     And the workload status for app 'compute' is 'active'
     And the workload status for app 'database' is 'active'
     And the workload status for app 'rest-api' is 'active'
-    And the slurm auth JWKS key on unit 'controller/0' is rotated and propagated to all units
+    And the Slurm auth JWKS key on unit 'controller/0' is rotated and propagated to all units
   - |-
     Rotate JWT key across the cluster
 
-    Given I capture the slurm JWT signing key from unit 'controller/0'
-    And I capture the slurm JWT signing key from unit 'database/0'
-    And the initial slurm JWT signing keys match between 'controller/0' and 'database/0'
-    And I capture an initial slurm JWT token from unit 'controller/0'
+    Given I capture the Slurm JWT signing key from unit 'controller/0'
+    And I capture the Slurm JWT signing key from unit 'database/0'
+    And the initial Slurm JWT signing keys match between 'controller/0' and 'database/0'
+    And I capture an initial Slurm JWT token from unit 'controller/0'
     And the slurmrestd diagnostic endpoints are reachable from 'controller/0'
     When I run action 'rotate-jwt-key' on unit 'controller/0' with an extended timeout
     Then the workload status for app 'login' is 'active'
@@ -148,9 +262,9 @@ scenarios:
     And the workload status for app 'compute' is 'active'
     And the workload status for app 'database' is 'active'
     And the workload status for app 'rest-api' is 'active'
-    And the slurm JWT signing key on unit 'controller/0' is rotated and matches unit 'database/0'
-    And the initial slurm JWT token from unit 'controller/0' is no longer valid
-    And a new slurm JWT token from unit 'controller/0' is valid for all slurmrestd diagnostic endpoints
+    And the Slurm JWT signing key on unit 'controller/0' is rotated and matches unit 'database/0'
+    And the initial Slurm JWT token from unit 'controller/0' is no longer valid
+    And a new Slurm JWT token from unit 'controller/0' is valid for all slurmrestd diagnostic endpoints
 
 ---
 feature: "Slurm job submission"
@@ -167,15 +281,15 @@ scenarios:
   - |-
     Simple job submission
 
-    Then a slurm srun job submitted from unit 'login/0' runs on unit 'compute/0'
+    Then a Slurm srun job submitted from unit 'login/0' runs on unit 'compute/0'
   - |-
     GPU job submission with mock GPU
 
     Given I set up a mock NVIDIA GPU device on unit 'compute/0'
     And I set 'cgroup-parameters' for app 'controller' to 'constraindevices=no'
     When I run action 'set-node-config' on unit 'compute/0' with parameters 'parameters=gres=gpu:mock_gpu:1'
-    And I re-register the slurmd node 'compute-0' with the slurm controller on unit 'login/0'
-    Then a slurm srun GPU job requesting 1 GPU submitted from unit 'login/0' runs on unit 'compute/0'
+    And I re-register the slurmd node 'compute-0' with the Slurm controller on unit 'login/0'
+    Then a Slurm srun GPU job requesting 1 GPU submitted from unit 'login/0' runs on unit 'compute/0'
 
 ---
 feature: "Slurm mail notifications"
@@ -200,18 +314,18 @@ scenarios:
   - |-
     Notification email when a job ends
 
-    When I run a slurm srun job on unit 'login/0' with mail user 'user@localhost' and mail type 'END'
+    When I run a Slurm srun job on unit 'login/0' with mail user 'user@localhost' and mail type 'END'
     Then a notification email is received by 'user@localhost' with subject matching '^Job charmed-hpc-[\w-]{4}\.\d+: Ended$' and content matching 'Your job \d+ has ended on charmed-hpc-[\w-]{4}\.'
   - |-
     Notification email when a job fails
 
-    When I run a failing slurm srun job on unit 'login/0' with mail user 'anotheruser@localhost' and mail type 'FAIL,END'
+    When I run a failing Slurm srun job on unit 'login/0' with mail user 'anotheruser@localhost' and mail type 'FAIL,END'
     Then a notification email is received by 'anotheruser@localhost' with subject matching '^Job charmed-hpc-[\w-]{4}\.\d+: Failed$' and content matching 'Your job \d+ has failed on charmed-hpc-[\w-]{4}\.'
   - |-
     Notification email with custom signature when a job begins
 
     Given I set 'email-from-name' for app 'controller' to 'Integration Test Suite'
-    When I run a slurm srun job on unit 'login/0' with mail user 'furtheruser@localhost' and mail type 'BEGIN'
+    When I run a Slurm srun job on unit 'login/0' with mail user 'furtheruser@localhost' and mail type 'BEGIN'
     Then a notification email is received by 'furtheruser@localhost' with subject matching '^Job charmed-hpc-[\w-]{4}\.\d+: Began$' and content matching 'Your job \d+ has started on charmed-hpc-[\w-]{4}\..*?Regards,.*?Integration Test Suite'
   - |-
     Remove SMTP integrator
@@ -238,7 +352,7 @@ scenarios:
     And I integrate 'apptainer' with 'controller'
     And I integrate 'apptainer' with 'compute'
     Then the workload status for app 'apptainer' is 'active'
-    And a slurm apptainer container job submitted from unit 'login/0' runs on unit 'compute/0'
+    And a Slurm apptainer container job submitted from unit 'login/0' runs on unit 'compute/0'
 
 ---
 feature: "Slurm InfluxDB accounting"
@@ -259,7 +373,7 @@ scenarios:
     Given I deploy 'influxdb'
     And I integrate 'influxdb' with 'controller'
     Then the workload status for app 'influxdb' is 'active'
-    And a slurm sstat task accounting job on unit 'login/0' reports '1' task
+    And a Slurm sstat task accounting job on unit 'login/0' reports '1' task
 
 ---
 feature: "Slurmctld high availability"
@@ -324,7 +438,7 @@ scenarios:
     And the slurmctld controller that is primary reports ping status 'UP'
     And the slurmctld controller that is backup reports ping status 'UP'
     When I stop the slurmctld service on the controller that is primary
-    Then the slurm sinfo command succeeds on unit 'login/0'
+    Then the Slurm sinfo command succeeds on unit 'login/0'
     And the slurmctld service on the controller that is backup is running as primary
   - |-
     Service recovery after restarting primary
@@ -333,7 +447,7 @@ scenarios:
     And the slurmctld controller that is primary reports ping status 'DOWN'
     And the slurmctld controller that is backup reports ping status 'UP'
     When I restart the slurmctld service on the controller that is primary
-    Then the slurm sinfo command succeeds on unit 'login/0'
+    Then the Slurm sinfo command succeeds on unit 'login/0'
     And the slurmctld service on the controller that is primary is running as primary
     And the slurmctld service on the controller that is backup is running in background mode
   - |-
@@ -346,8 +460,8 @@ scenarios:
     When I power off the primary slurmctld machine
     Then the primary slurmctld machine is powered off
     And the slurmctld service on the controller that is backup is running as primary
-    And the slurm sinfo command succeeds on unit 'login/0'
-    And a slurm srun job submitted from unit 'login/0' runs on unit 'compute/0'
+    And the Slurm sinfo command succeeds on unit 'login/0'
+    And a Slurm srun job submitted from unit 'login/0' runs on unit 'compute/0'
   - |-
     Unit recovery after rebooting primary machine
 
@@ -357,7 +471,7 @@ scenarios:
     And the primary slurmctld machine is powered off
     When I reboot the primary slurmctld machine
     Then the workload status for app 'controller' is 'active'
-    And the slurm sinfo command succeeds on unit 'login/0'
+    And the Slurm sinfo command succeeds on unit 'login/0'
     And the slurmctld service on the controller that is primary is running as primary
     And the slurmctld service on the controller that is backup is running in background mode
   - |-
